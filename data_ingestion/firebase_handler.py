@@ -2,7 +2,7 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db
 import os
-from getSheet import get_sheet_data
+from get_sheet import get_sheet_data
 
 
 # Initialize Firebase
