@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Data Viewer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        
+        .header {
+            background-color: white;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .controls-container {
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 90;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        label {
+            font-weight: bold;
+        }
+        
+        input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-width: 200px;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        .content {
+            margin-top: 20px;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .table-container {
+            overflow-x: auto;
+            max-height: calc(100vh - 200px);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background-color: #4CAF50;
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #4CAF50;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            color: red;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .status-container {
+            padding: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .control-group {
+                width: 100%;
+            }
+            
+            input {
+                flex: 1;
+                min-width: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1>Firebase Data Viewer</h1>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="controls-container">
+            <div class="controls">
+                <div class="control-group">
+                    <label for="pathInput">Firebase path:</label>
+                    <input type="text" id="pathInput" value="sheets_data">
+                    <button onclick="fetchData()">Load Data</button>
+                </div>
+                <div class="control-group">
+                    <input type="text" id="searchInput" placeholder="Search...">
+                    <button onclick="exportToCSV()">Export to CSV</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="status-container">
+                <div id="loading" class="loader" style="display: none;"></div>
+                <div id="error" class="error" style="display: none;"></div>
+            </div>
+            
+            <div class="table-container" id="tableContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        // API endpoint URL - change this to match your FastAPI server
+        const API_BASE_URL = 'http://localhost:8000';
+        
+        // Initial data load
+        document.addEventListener('DOMContentLoaded', fetchData);
+        
+        // Handle search input
+        document.getElementById('searchInput').addEventListener('keyup', filterTable);
+        
+        function fetchData() {
+            const path = document.getElementById('pathInput').value || 'sheets_data';
+            const loadingElement = document.getElementById('loading');
+            const errorElement = document.getElementById('error');
+            
+            // Show loading indicator
+            loadingElement.style.display = 'block';
+            errorElement.style.display = 'none';
+            
+            // Fetch data from API
+            fetch(`${API_BASE_URL}/sheets-data?path=${encodeURIComponent(path)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loadingElement.style.display = 'none';
+                    if (Array.isArray(data)) {
+                        renderTable(data);
+                    } else {
+                        renderTable([data]); // If it's a single object, wrap it in array
+                    }
+                })
+                .catch(error => {
+                    loadingElement.style.display = 'none';
+                    errorElement.textContent = `Error loading data: ${error.message}`;
+                    errorElement.style.display = 'block';
+                    document.getElementById('tableContainer').innerHTML = '';
+                });
+        }
+        
+        function renderTable(data) {
+            if (!data || data.length === 0) {
+                document.getElementById('tableContainer').innerHTML = '<p class="error">No data available</p>';
+                return;
+            }
+            
+            // Get all possible headers from all objects
+            const headers = new Set();
+            data.forEach(item => {
+                Object.keys(item).forEach(key => headers.add(key));
+            });
+            
+            // Create table
+            let tableHtml = '<table id="dataTable">';
+            
+            // Add header row
+            tableHtml += '<thead><tr>';
+            headers.forEach(header => {
+                tableHtml += `<th>${header}</th>`;
+            });
+            tableHtml += '</tr></thead>';
+            
+            // Add data rows
+            tableHtml += '<tbody>';
+            data.forEach(item => {
+                tableHtml += '<tr>';
+                headers.forEach(header => {
+                    const value = item[header] !== undefined ? item[header] : '';
+                    tableHtml += `<td>${value}</td>`;
+                });
+                tableHtml += '</tr>';
+            });
+            tableHtml += '</tbody></table>';
+            
+            // Add table to page
+            document.getElementById('tableContainer').innerHTML = tableHtml;
+        }
+        
+        function filterTable() {
+            const input = document.getElementById('searchInput');
+            const filter = input.value.toLowerCase();
+            const table = document.getElementById('dataTable');
+            
+            if (!table) return;
+            
+            const rows = table.getElementsByTagName('tr');
+            
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = row.getElementsByTagName('td');
+                let showRow = false;
+                
+                for (let j = 0; j < cells.length; j++) {
+                    const cell = cells[j];
+                    if (cell) {
+                        const text = cell.textContent || cell.innerText;
+                        if (text.toLowerCase().includes(filter)) {
+                            showRow = true;
+                            break;
+                        }
+                    }
+                }
+                
+                row.style.display = showRow ? '' : 'none';
+            }
+        }
+        
+        function exportToCSV() {
+            const table = document.getElementById('dataTable');
+            if (!table) return;
+            
+            let csv = [];
+            
+            // Extract headers
+            const headerRow = table.rows[0];
+            let headers = [];
+            for (let i = 0; i < headerRow.cells.length; i++) {
+                headers.push('"' + headerRow.cells[i].innerText + '"');
+            }
+            csv.push(headers.join(','));
+            
+            // Extract data rows
+            for (let i = 1; i < table.rows.length; i++) {
+                const row = table.rows[i];
+                if (row.style.display !== 'none') { // Only export visible rows
+                    let rowData = [];
+                    for (let j = 0; j < row.cells.length; j++) {
+                        rowData.push('"' + (row.cells[j].innerText || '') + '"');
+                    }
+                    csv.push(rowData.join(','));
+                }
+            }
+            
+            // Download CSV file
+            const csvContent = csv.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'firebase_data.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
