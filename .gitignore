@@ -1,2 +1,7 @@
 # Environment variables
 .env
+venv
+__pycache__
+
+#config files
+firebaseConfig.json
